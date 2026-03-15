@@ -3,9 +3,14 @@ import time
 import math
 
 def lambda_handler(event, context):
+    params = event.get('queryStringParameters') or {}
+    workload = params.get('workload', 'light')
+    
+    limits = {'light': 500, 'medium': 5000, 'heavy': 50000}
+    limit = limits.get(workload, 500)
+    
     start = time.time()
     
-    # Simulate real computation (prime number check)
     def is_prime(n):
         if n < 2:
             return False
@@ -14,8 +19,7 @@ def lambda_handler(event, context):
                 return False
         return True
     
-    # Do some work so the function isn't trivially fast
-    primes = [x for x in range(2, 500) if is_prime(x)]
+    primes = [x for x in range(2, limit) if is_prime(x)]
     
     end = time.time()
     duration_ms = round((end - start) * 1000, 2)
@@ -24,6 +28,7 @@ def lambda_handler(event, context):
         "statusCode": 200,
         "body": json.dumps({
             "message": "Hello from Lambda",
+            "workload": workload,
             "primes_found": len(primes),
             "computation_ms": duration_ms
         })

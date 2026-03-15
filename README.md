@@ -1,7 +1,7 @@
 # ⚡ AWS Lambda vs Docker on EC2
 ## The Cost Impact of INIT Phase Billing on Serverless Deployment Decisions
 
-> **TL;DR:** AWS changed how they bill Lambda in August 2025. Nobody has studied what this means for cost decisions. I did. The answer: Lambda becomes more expensive than Docker at ~38,760 requests/day — a threshold that every prior cost model completely missed.
+> **TL;DR:** AWS changed how they bill Lambda in August 2025. Nobody has studied what this means for cost decisions. I did. The crossover point is not a single number — it shifts from 82,000 to 50,000 requests/day depending on workload intensity. Every prior cost model missed this entirely.
 
 ---
 
@@ -24,13 +24,13 @@ For years, this was just a speed problem. Annoying, but free.
 
 Every paper ever written about Lambda costs missed this. Every cost model, every comparison, every benchmark — all assumed INIT phase = free.
 
-**This research fixes that.**
+**This research fixes that — and shows the crossover point shifts with workload complexity.**
 
 ---
 
 ## 🔬 What I Actually Did
 
-Built the **same REST API twice:**
+Built the **same REST API twice** and tested at **3 workload levels:**
 
 | | Deployment A | Deployment B |
 |---|---|---|
@@ -39,19 +39,25 @@ Built the **same REST API twice:**
 | **Billing** | Per request + INIT phase | Fixed $0.0104/hour |
 | **Cold Start** | Yes — every idle invocation | Never |
 
-Then fired **100 automated requests** (50 each) and measured everything.
+| Workload | Computation | Runs |
+|---|---|---|
+| **Light** | Primes up to 500 | 100 runs each |
+| **Medium** | Primes up to 5,000 | 100 runs each |
+| **Heavy** | Primes up to 50,000 | 100 runs each |
+
+**Total: 600 automated benchmark runs**
 
 ---
 
 ## 📊 Experiment Results
 
-### Live Benchmark Running — 100 Automated Requests
+### Live Benchmark Running — 600 Automated Requests
 ![Experiment Running](experiment_result_1.png)
-*Real-time output of the benchmark script running 50 requests against each deployment*
+*Real-time output of the benchmark script — 100 runs per workload per deployment*
 
 ### Final Summary Output
 ![Experiment Summary](experiment_result_2.png)
-*Lambda avg 1463ms vs Docker avg 495ms — Docker is 2.96x faster*
+*Lambda avg 1,327ms–2,375ms vs Docker avg 498ms–545ms across workloads*
 
 ---
 
@@ -59,16 +65,20 @@ Then fired **100 automated requests** (50 each) and measured everything.
 
 ![Performance Analysis](performance_analysis.png)
 
-| Metric | Lambda | Docker EC2 |
-|---|---|---|
-| **Mean** | 1,463 ms | 495 ms |
-| **Median** | 1,297 ms | 491 ms |
-| **Std Deviation** | 384 ms 😬 | 34 ms ✅ |
-| **Min** | 1,095 ms | 448 ms |
-| **Max** | 2,345 ms | 637 ms |
-| **INIT Phase Mean** | 1,462 ms | 0 ms |
+| Workload | Lambda Mean | Docker Mean | Lambda Slower By |
+|---|---|---|---|
+| **Light** | 1,327 ms | 498 ms | **2.7x** |
+| **Medium** | 1,432 ms | 527 ms | **2.7x** |
+| **Heavy** | 2,375 ms | 545 ms | **4.4x** |
 
-> Lambda's variance is **125x higher** than Docker — cold starts make it unpredictable
+| Metric | Lambda (Light) | Docker (Light) |
+|---|---|---|
+| **Mean** | 1,327 ms | 498 ms |
+| **Median** | 1,267 ms | 486 ms |
+| **Std Deviation** | 306 ms 😬 | 109 ms ✅ |
+| **INIT Phase** | 1,327 ms (99.97%) | 0 ms |
+
+> As workload gets heavier, Lambda gets dramatically slower while Docker stays stable
 
 ---
 
@@ -76,31 +86,35 @@ Then fired **100 automated requests** (50 each) and measured everything.
 
 ![Cost Analysis](cost_analysis.png)
 
+### Heavy Workload Cost Table
 | Requests/Day | Lambda Cost | Docker Cost | Winner |
 |---|---|---|---|
-| 10 | $0.000064 | $0.2496 | ✅ Lambda |
-| 100 | $0.000644 | $0.2496 | ✅ Lambda |
-| 1,000 | $0.006442 | $0.2496 | ✅ Lambda |
-| 5,000 | $0.032208 | $0.2496 | ✅ Lambda |
-| 10,000 | $0.064415 | $0.2496 | ✅ Lambda |
-| 50,000 | $0.322077 | $0.2496 | ✅ Docker EC2 |
-| 100,000 | $0.644155 | $0.2496 | ✅ Docker EC2 |
+| 10 | $0.000053 | $0.2496 | ✅ Lambda |
+| 100 | $0.000527 | $0.2496 | ✅ Lambda |
+| 1,000 | $0.005266 | $0.2496 | ✅ Lambda |
+| 5,000 | $0.026330 | $0.2496 | ✅ Lambda |
+| 10,000 | $0.052661 | $0.2496 | ✅ Lambda |
+| 50,000 | $0.263304 | $0.2496 | ✅ Docker EC2 |
+| 100,000 | $0.526607 | $0.2496 | ✅ Docker EC2 |
 
 ---
 
 ## 🎯 The Key Finding
 
 ```
-╔══════════════════════════════════════════════════════╗
-║         COST CROSSOVER POINT: ~38,760 req/day        ║
-║                                                      ║
-║   Below 38,760/day  →  Lambda is cheaper  ✅         ║
-║   Above 38,760/day  →  Docker EC2 cheaper ✅         ║
-║                                                      ║
-║   INIT phase = $3.12 per 1,000 requests              ║
-║   (previously $0.00 in ALL prior research)           ║
-╚══════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════╗
+║         COST CROSSOVER POINT IS WORKLOAD-DEPENDENT       ║
+║                                                          ║
+║   Light workload  →  crossover at ~82,000 req/day  ✅   ║
+║   Medium workload →  crossover at ~76,700 req/day  ✅   ║
+║   Heavy workload  →  crossover at ~50,000 req/day  ✅   ║
+║                                                          ║
+║   39% shift driven entirely by INIT phase billing        ║
+║   (a cost that was $0.00 in ALL prior research)          ║
+╚══════════════════════════════════════════════════════════╝
 ```
+
+**Provisioned Concurrency note:** Even with PC enabled ($0.0000041667/GB-s), Lambda stays above the Docker EC2 cost threshold at high volumes — PC eliminates latency but does not solve the cost disadvantage.
 
 ---
 
@@ -110,18 +124,22 @@ Then fired **100 automated requests** (50 each) and measured everything.
 cloud-research/
 │
 ├── lambda-api/
-│   ├── app.py                  # Lambda function (Python 3.11)
-│   └── function.zip            # Deployment package
+│   ├── app.py                   # Lambda function — 3 workload levels
+│   └── function.zip             # Deployment package
 │
 ├── docker-api/
-│   ├── app.py                  # Flask API (identical logic)
-│   ├── Dockerfile              # Container definition
-│   └── requirements.txt        # Dependencies
+│   ├── app.py                   # Flask API — identical logic
+│   ├── Dockerfile               # Container definition
+│   └── requirements.txt         # Dependencies
 │
 ├── results/
-│   ├── experiment.py           # 100-run automated benchmark script
-│   ├── cost_analysis.py        # Cost modeling + crossover calculation
-│   └── benchmark_results.csv   # Raw data — all 100 runs
+│   ├── experiment.py            # Original 100-run benchmark script
+│   ├── experiment_v2.py         # 600-run multi-workload script
+│   ├── cost_analysis.py         # Original cost model
+│   ├── cost_analysis_v2.py      # Multi-workload cost + crossover
+│   ├── create_charts.py         # Chart generation script
+│   ├── benchmark_results.csv    # Original 100-run raw data
+│   └── benchmark_results_v2.csv # Full 600-run raw data
 │
 └── README.md
 ```
@@ -146,23 +164,23 @@ aws lambda create-function --function-name cloud-research-api \
   --role arn:aws:iam::YOUR_ACCOUNT_ID:role/lambda-research-role \
   --handler app.lambda_handler \
   --zip-file fileb://function.zip
+aws lambda create-function-url-config --function-name cloud-research-api --auth-type NONE
 ```
 
 ### Step 2 — Deploy Docker on EC2
 ```bash
-# Launch EC2 t3.micro on AWS Console
-# SSH in, then:
-cd docker-api
+# Launch EC2 t3.micro on AWS Console, SSH in, then:
 docker build -t research-api .
 docker run -d -p 5000:5000 research-api
 ```
 
-### Step 3 — Run the Benchmark
+### Step 3 — Run the Full Benchmark
 ```bash
 cd results
-pip install requests
-python experiment.py      # runs 100 requests, saves CSV
-python cost_analysis.py   # calculates crossover point
+pip install requests matplotlib
+python experiment_v2.py     # 600 runs across 3 workloads
+python cost_analysis_v2.py  # crossover points per workload
+python create_charts.py     # generates Fig 1 and Fig 2
 ```
 
 ---
@@ -170,13 +188,13 @@ python cost_analysis.py   # calculates crossover point
 ## 🔑 Why This Matters
 
 **For developers:**
-Lambda saves you ~$88/month vs EC2 at 1,000 req/day. But at 50,000+ req/day, EC2 is cheaper — and no tool was telling you this before August 2025.
+The crossover point is not a fixed number. A lightweight webhook handler has a different threshold than a data-processing API. This research gives you workload-specific guidance for the first time.
 
 **For DevOps engineers:**
-Every cost calculator, every AWS blog post, every comparison article still uses the old billing model. This gives you updated numbers with real data.
+Every cost calculator, every AWS blog post, every comparison article still uses the old pre-August 2025 billing model. This gives you updated, empirically validated numbers.
 
 **For researchers:**
-This is the first empirical study to incorporate AWS Lambda's August 2025 INIT phase billing change into a cost crossover analysis. 15 papers reviewed — zero accounted for it.
+This is the first empirical study to incorporate AWS Lambda's August 2025 INIT phase billing change into a crossover analysis across multiple workload intensities. 13 papers reviewed — zero accounted for it.
 
 ---
 
@@ -200,4 +218,4 @@ FAST NUCES — Department of Computer Science, Islamabad, Pakistan
 
 ---
 
-*Research conducted March 2026*
+*Research conducted March 2026 | 600 experimental runs | 3 workload levels | AWS us-east-1*
