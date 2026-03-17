@@ -148,7 +148,7 @@ Built the **same REST API twice** and tested at **3 workload levels:**
 
 <div align="center">
 
-![Performance Analysis](performance_analysis.png)
+![Performance Analysis](results/chart1_response_time.png)
 
 </div>
 
@@ -172,7 +172,7 @@ Built the **same REST API twice** and tested at **3 workload levels:**
 |:---:|:---:|:---:|
 | **Mean** | 1,327 ms | 498 ms |
 | **Median** | 1,267 ms | 486 ms |
-| **Std Deviation** | 306 ms 😬 | 109 ms ✅ |
+| **Std Deviation** | 306 ms 😬 | 109.09 ms ✅ |
 | **INIT Phase** | 1,327 ms (99.97%) | 0 ms |
 
 </div>
@@ -190,7 +190,7 @@ Built the **same REST API twice** and tested at **3 workload levels:**
 
 <div align="center">
 
-![Cost Analysis](cost_analysis.png)
+![Cost Analysis](results/chart2_cost_crossover.png)
 
 <br>
 
